@@ -3,11 +3,12 @@ import os
 import time
 import logging
 from datetime import date
-import assessor_create_util
+
+from dax.psql import assessor_create_util
 import cluster
 from cluster import PBS
-
 from dax_settings import DAX_Settings
+
 DAX_SETTINGS = DAX_Settings()
 
 #Logger to print logs
@@ -86,9 +87,13 @@ class PSQLTask(object):
                 # assessor.create(assessors=self.atype) # old way
                 PSQLTask.create(self)
 
+            # TODO
             self.set_createdate_today()
+
             atype = self.atype.lower()
             if atype == 'proc:genprocdata':
+
+                # TODO
                 assessor.attrs.mset({atype +'/proctype':self.get_processor_name(),
                 atype+'/procversion':self.get_processor_version()})
 
@@ -460,7 +465,10 @@ class PSQLTask(object):
         :return: String of the date that the job started in "%Y-%m-%d" format
 
         """
-        return self.assessor.attrs.get(self.atype+'/jobstartdate')
+        self.psql_cursor.execute("""SELECT jobstartdate from proc_genprocdata where label=(%s)""" % (self.assessor_label,))
+        result = self.psql_cursor.fetchone()
+        return result(0)
+
 
     def set_jobstartdate_today(self):
         """
@@ -482,7 +490,7 @@ class PSQLTask(object):
         :return: None
 
         """
-        self.assessor.attrs.set(self.atype.lower()+'/jobstartdate', date_str)
+        self.psql_cursor.execute("""UPDATE proc_genprocdata set jobstartdate=(%s) where label=(%s)""" % (date_str, self.assessor_label,))
 
     def get_createdate(self):
         """
@@ -492,7 +500,10 @@ class PSQLTask(object):
          format
 
         """
-        return self.assessor.attrs.get(self.atype+'/date')
+        self.psql_cursor.execute("""SELECT date from proc_genprocdata where label=(%s)""" % (self.assessor_label,))
+        result = self.psql_cursor.fetchone()
+        return result(0)
+        # return self.assessor.attrs.get(self.atype+'/date')
 
     def set_createdate(self, date_str):
         """
@@ -502,7 +513,7 @@ class PSQLTask(object):
         :return: String of today's date in "%Y-%m-%d" format
 
         """
-        self.assessor.attrs.set(self.atype+'/date', date_str)
+        self.psql_cursor.execute("""UPDATE proc_genprocdata set date=(%s) where label=(%s)""" % (date_str, self.assessor_label,))
         return date_str
 
     def set_createdate_today(self):
@@ -513,10 +524,11 @@ class PSQLTask(object):
 
         """
         today_str = str(date.today())
-        self.set_createdate(today_str)
+        self.psql_cursor.execute("""UPDATE proc_genprocdata set date=(%s) where label=(%s)""" % (today_str, self.assessor_label,))
+        # self.set_createdate(today_str)
         return today_str
 
-    def get_status(self):
+    def get_status(self, assessor_id):
         """
         Get the procstatus of an assessor
 
@@ -527,14 +539,18 @@ class PSQLTask(object):
         if not self.assessor.exists():
             xnat_status = DOES_NOT_EXIST
         elif self.atype == 'proc:genprocdata':
-            xnat_status = self.assessor.attrs.get('proc:genProcData/procstatus')
+            self.psql_cursor.execute("""SELECT procstatus from proc_genprocdata WHERE id=(%s)""", (assessor_id,) )
+            result = self.psql_cursor.fetchone()
+            xnat_status=result(0)
         elif self.atype == 'fs:fsdata':
-            xnat_status = self.assessor.attrs.get('fs:fsdata/procstatus')
+            self.psql_cursor.execute("""SELECT procstatus from fs_fsdata WHERE id=(%s)""", (assessor_id,) )
+            result = self.psql_cursor.fetchone()
+            xnat_status=result(0)
         else:
             xnat_status = 'UNKNOWN_xsiType:'+self.atype
         return xnat_status
 
-    def get_statuses(self):
+    def get_statuses(self, assessor_id, validation_id):
         """
         Get the procstatus, qcstatus, and job id of an assessor
 
@@ -542,13 +558,22 @@ class PSQLTask(object):
          qcstatus, then jobid.
         """
         atype = self.atype
-        if not self.assessor.exists():
+        if not self.exists():
             xnat_status = DOES_NOT_EXIST
             qcstatus = DOES_NOT_EXIST
             jobid = ''
         elif atype == 'proc:genprocdata' or atype == 'fs:fsdata':
-            xnat_status, qcstatus, jobid = self.assessor.attrs.mget(
-                [atype+'/procstatus', atype+'/validation/status', atype+'/jobid'])
+            self.psql_cursor.execute("""SELECT procstatus,jobid from proc_genprocdata WHERE id=(%s)""", (assessor_id,) )
+            result = self.psql_cursor.fetchall()
+            xnat_status = result(0)
+            jobid = result(1)
+
+            self.psql_cursor.execute("""SELECT status from xnat_validationdata where xnat_validation_id=(%s)""")
+            result =  self.psql_cursor.fetchone()
+
+            qcstatus = result(0)
+            # xnat_status, qcstatus, jobid = self.assessor.attrs.mget(
+            #     [atype+'/procstatus', atype+'/validation/status', atype+'/jobid'])
         else:
             xnat_status = 'UNKNOWN_xsiType:'+atype
             qcstatus = 'UNKNOWN_xsiType:'+atype
@@ -564,9 +589,10 @@ class PSQLTask(object):
         :return: None
 
         """
-        self.assessor.attrs.set(self.atype+'/procstatus', status)
+        self.psql_cursor.execute("""UPDATE procgenprocdata SET procstatus=(%s) WHERE id=(%s)""" % (procstatus, assessor_id,))
+        # self.assessor.attrs.set(self.atype+'/procstatus', status)
 
-    def get_qcstatus(self):
+    def get_qcstatus(self, validation_id):
         """
         Get the qcstatus of the assessor
 
@@ -578,16 +604,18 @@ class PSQLTask(object):
         qcstatus = ''
         atype = self.atype
 
-        if not self.assessor.exists():
+        if not self.exists():
             qcstatus = DOES_NOT_EXIST
         elif atype == 'proc:genprocdata' or atype == 'fs:fsdata':
-            qcstatus = self.assessor.attrs.get(atype+'/validation/status')
+            self.psql_cursor.execute(""" SELECT status FROM xnat_validationdata WHERE xnat_validation_id=(%s) """ %(validation_id))
+            result = self.psql_cursor.fetchone()
+            qcstatus = result(0)
         else:
             qcstatus = 'UNKNOWN_xsiType:'+atype
 
         return qcstatus
 
-    def set_qcstatus(self, qcstatus):
+    def set_qcstatus(self, qcstatus, validation_id):
         """
         Set the qcstatus of the assessor
 
@@ -595,13 +623,14 @@ class PSQLTask(object):
         :return: None
 
         """
-        self.assessor.attrs.mset({self.atype+'/validation/status': qcstatus,
-                                  self.atype+'/validation/validated_by':'NULL',
-                                  self.atype+'/validation/date':'NULL',
-                                  self.atype+'/validation/notes':'NULL',
-                                  self.atype+'/validation/method':'NULL'})
+        self.psql_cursor.execute("""UPDATE xnat_validationdata SET status=(%s) WHERE validation_id=(%s)""" % (qcstatus, validation_id))
+        # self.assessor.attrs.mset({self.atype+'/validation/status': qcstatus,
+        #                           self.atype+'/validation/validated_by':'NULL',
+        #                           self.atype+'/validation/date':'NULL',
+        #                           self.atype+'/validation/notes':'NULL',
+        #                           self.atype+'/validation/method':'NULL'})
 
-    def set_proc_and_qc_status(self, procstatus, qcstatus):
+    def set_proc_and_qc_status(self, procstatus, qcstatus, assessor_id, validation_id):
         """
         Set the procstatus and qcstatus of the assessor
 
@@ -610,10 +639,12 @@ class PSQLTask(object):
         :return: None
 
         """
-        self.assessor.attrs.mset({self.atype+'/procstatus':procstatus,
-                                  self.atype+'/validation/status':qcstatus})
+        self.psql_cursor.execute("""UPDATE procgenprocdata SET procstatus=(%s) WHERE id=(%s)""" % (procstatus, assessor_id,))
+        self.psql_cursor.execute("""UPDATE xnat_validationdata SET status=(%s) WHERE validation_id=(%s)""" % (qcstatus, validation_id))
+        # self.assessor.attrs.mset({self.atype+'/procstatus':procstatus,
+        #                          self.atype+'/validation/status':qcstatus})
 
-    def set_jobid(self, jobid):
+    def set_jobid(self, jobid, assessor_id):
         """
         Set the job ID of the assessor on XNAT
 
@@ -621,9 +652,10 @@ class PSQLTask(object):
         :return: None
 
         """
-        self.assessor.attrs.set(self.atype+'/jobid', jobid)
+        self.psql_cursor.execute("""UPDATE proc_genprocdata SET jobid=(%s) WHERE id=(%s)""" % (jobid, assessor_id,))
+        # self.assessor.attrs.set(self.atype+'/jobid', jobid)
 
-    def set_launch(self, jobid):
+    def set_launch(self, jobid, assessor_id):
         """
         Set the date that the job started and its associated ID on XNAT.
         Additionally, set the procstatus to JOB_RUNNING
@@ -633,11 +665,12 @@ class PSQLTask(object):
 
         """
         today_str = str(date.today())
-        atype = self.atype.lower()
-        self.assessor.attrs.mset({
-            atype+'/jobstartdate':today_str,
-            atype+'/jobid':jobid,
-            atype+'/procstatus':JOB_RUNNING})
+        # atype = self.atype.lower()
+        self.psql_cursor.execute("""UPDATE proc_genprocdata SET (jobstartdate, jobid, procstatus) VALUES (%s,%s,%s); WHERE id=(%s)""" %(today_str, jobid, JOB_RUNNING,assessor_id))
+        # self.assessor.attrs.mset({
+        #     atype+'/jobstartdate':today_str,
+        #     atype+'/jobid':jobid,
+        #     atype+'/procstatus':JOB_RUNNING})
 
     def commands(self, jobdir):
         """
@@ -814,3 +847,12 @@ class PSQLTask(object):
 
         assessor_create_util.insert_need_inputs_status(self.psql_connection,self.psql_cursor,procstatus,proctype, experiment_id)
         LOGGER.debug("Inserted NEED_INPUTS status")
+
+    def exists(self):
+        """
+        Checks to see if the assessor exists
+        :return:
+        """
+        return assessor_create_util.check_if_assessor_exists(self.psql_cursor,
+                                                             self.assessor_label.split('-x-')[0],
+                                                             self.assessor_label)
