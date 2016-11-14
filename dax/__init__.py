@@ -10,3 +10,4 @@ from .XnatUtils import SpiderProcessHandler
 from .modules import ScanModule, SessionModule
 from .spiders import AutoSpider, ScanSpider, SessionSpider
 from .processors import ScanProcessor, SessionProcessor
+from psql import psql_task
