@@ -184,11 +184,14 @@ def read_report():
                         scans_dl_dict[label] = [row[-2]]
                     old_rows.append(row)
                 elif row[0] == 'assessor':
-                    if row[5] in asses_dl_dict.keys():
-                        asses_dl_dict[row[5]].append(row[-2])
-                    else:
-                        asses_dl_dict[row[5]] = [row[-2]]
-                    old_rows.append(row)
+                    try:
+                        if row[5] in asses_dl_dict.keys():
+                            asses_dl_dict[row[5]].append(row[-2])
+                        else:
+                            asses_dl_dict[row[5]] = [row[-2]]
+                        old_rows.append(row)
+                    except IndexError:
+                        LOGGER.error('download_report.csv is corrupt. please re-download')
     LOGGER.info('Reading download_report.csv from previous download: done.')
     return scans_dl_dict, asses_dl_dict, last_dl_date, old_rows
 
