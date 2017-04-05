@@ -868,7 +868,8 @@ The project is not part of the settings."""
         if os.path.exists(lock_file):
             return False
         else:
-            open(lock_file, 'w').close()
+            with open(lock_file, 'w') as f:
+                f.writelines(os.getpid())
             return True
 
     @staticmethod
