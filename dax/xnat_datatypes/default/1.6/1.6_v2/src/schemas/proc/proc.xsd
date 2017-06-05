@@ -43,7 +43,7 @@
 				<xs:element name="dax_code_version" type="xs:string" use="optional" />
 				<xs:element name="dax_docker_version" type="xs:string" use="optional" />
 				<xs:element name="dax_version" type="xs:string" use="optional" />
-				<xs:element name="dax_veresion_hash" type="xs:string" use="optional" />
+				<xs:element name="dax_version_hash" type="xs:string" use="optional" />
 			</xs:extension>
 		</xs:complexContent>
 	</xs:complexType>
