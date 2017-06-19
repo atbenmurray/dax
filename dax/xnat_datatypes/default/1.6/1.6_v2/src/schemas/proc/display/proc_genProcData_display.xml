@@ -118,28 +118,28 @@
         <DisplayFieldElement name="Field1" schema-element="proc:genProcData/jobnode"/>
     </DisplayField>
 	<DisplayField id="DAX_PROCESSOR_VERSION" header="DAX_PROCESSOR_VERSION" visible="true" searchable="true" data-type="string">
-	    <DisplayFieldElement name="Field1" schema-element="proc:genProcData/daxprocessorversion" />
+	    <DisplayFieldElement name="Field1" schema-element="proc:genProcData/dax_processor_version" />
 	</DisplayField>
 	<DisplayField id="DAX_PROCESSOR_NAME" header="DAX_PROCESSOR_NAME" visible="true" searchable="true" data-type="string">
-		<DisplayFieldElement name="Field1" schema-element="proc:genProcData/daxprocessorname" />
+		<DisplayFieldElement name="Field1" schema-element="proc:genProcData/dax_processor_name" />
 	</DisplayField>
 	<DisplayField id="DAX_SPIDER_VERSION" header="DAX_SPIDER_VERSION" visible="true" searchable="true" data-type="string">
-		<DisplayFieldElement name="Field1" schema-element="proc:genProcData/daxspiderversion" />
+		<DisplayFieldElement name="Field1" schema-element="proc:genProcData/dax_spider_version" />
 	</DisplayField>
 	<DisplayField id="DAX_SPIDER_NAME" header="DAX_SPIDER_NAME" visible="true" searchable="true" data-type="string">
-		<DisplayFieldElement name="Field1" schema-element="proc:genProcData/daxspidername" />
+		<DisplayFieldElement name="Field1" schema-element="proc:genProcData/dax_spider_name" />
 	</DisplayField>
 	<DisplayField id="DAX_CODE_VERSION" header="DAX_CODE_VERSION" visible="true" searchable="true" data-type="string">
-		<DisplayFieldElement name="Field1" schema-element="proc:genProcData/daxcodeversion" />
+		<DisplayFieldElement name="Field1" schema-element="proc:genProcData/dax_code_version" />
 	</DisplayField>
 	<DisplayField id="DAX_DOCKER_VERSION" header="DAX_DOCKER_VERSION" visible="true" searchable="true" data-type="string">
-		<DisplayFieldElement name="Field1" schema-element="proc:genProcData/daxdockerversion" />
+		<DisplayFieldElement name="Field1" schema-element="proc:genProcData/dax_docker_version" />
 	</DisplayField>
 	<DisplayField id="DAX_VERSION" header="DAX_VERSION" visible="true" searchable="true" data-type="string">
-		<DisplayFieldElement name="Field1" schema-element="proc:genProcData/daxversion" />
+		<DisplayFieldElement name="Field1" schema-element="proc:genProcData/dax_version" />
 	</DisplayField>
 	<DisplayField id="DAX_VERSION_HASH" header="DAX_VERSION_HASH" visible="true" searchable="true" data-type="string">
-		<DisplayFieldElement name="Field1" schema-element="proc:genProcData/daxversionhash" />
+		<DisplayFieldElement name="Field1" schema-element="proc:genProcData/dax_version_hash" />
 	</DisplayField>
 	<DisplayVersion versionName="listing" default-order-by="DATE" default-sort-order="DESC" brief-description="Processing" dark-color="9999CC" light-color="CCCCFF">
 		<DisplayFieldRef id="RPT"/>
