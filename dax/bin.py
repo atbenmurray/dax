@@ -328,7 +328,7 @@ def load_from_file(filepath, args, logger):
             pass
 
         err = '[ERROR] Module or processor NOT FOUND in the python file {}.'
-        logger.err(err.format(filepath))
+        logger.error(err.format(filepath))
 
     elif filepath.endswith('.yaml'):
         return processors.AutoProcessor(filepath, args)

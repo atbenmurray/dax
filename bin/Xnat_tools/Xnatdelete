@@ -1,0 +1,467 @@
+#! /usr/bin/env python
+
+import sys
+from dax import XnatUtils
+from argparse import ArgumentParser
+
+'''
+The following script deletes assessors, scans, and/or resources from XNAT
+Joshua Benton, Vanderbilt University, Electrical Engineering, 10/3/2016
+'''
+
+def parse_args():
+    # Parse the args
+    parser = ArgumentParser()
+    parser.add_argument('-p', '--project', required=True, help='XNAT Project ID', dest='project')
+    parser.add_argument('-s', '--session', required=True, dest='session', help='XNAT session ID(s).  Set to "all" to delete the specified assessors or scans from all of the sessions in the project.')
+    parser.add_argument('-st', '--scanType', required=False, dest='scanType', help='XNAT scan Type(s) to be deleted.')
+    parser.add_argument('-sl', '--scanLabel', required=False, dest='scanLabel', help='XNAT scan number(s) to be deleted.')
+    parser.add_argument('--AllScans', required=False, action='store_true', dest='allscans', help='Perform deletion for all scans within the specified session(s).')
+    parser.add_argument('-at', '--assessorType', required=False, dest='assessorType', help='XNAT assessor Type(s) to be deleted.')
+    parser.add_argument('-al', '--assessorLabel', required=False, dest='assessorLabel', help='XNAT assessor Proc ID(s) to be deleted. Replace the subj/sess ID in the label with "*" to delete all matching assessor labels from multiple session at a time (i.e. ZALD_DND-x-*-x-*-x-901-x-fMRIQA).')
+    parser.add_argument('--AllAssessors', required=False, action='store_true', dest='allassessors', help='Perform deletion for all assessors within the specified session(s).')
+    parser.add_argument('-r', '--resource', required=False, dest='resourceArg',help='Specify the resource(s) that should be deleted from the specified assessor(s)/scan(s). If -r not used, the entire assessor/scan is deleted.')
+    parser.add_argument('-R', '--sessionResource', required=False, dest='sessionResource', help='Name of session-level resource to be deleted.')
+    parser.add_argument('--AllSessionResources', required=False, action='store_true', dest='allsessionresources', help='Delete all session-level resources within the specified session(s).')
+    parser.add_argument('--force', required=False, dest='force',action='store_true', default=False,help='Force the delete that you do not have to type yes for each session.')
+
+    return parser.parse_args()
+
+def get_list(input_val):
+    if isinstance(input_val, list):
+        return input_val
+    elif isinstance(input_val, str):
+        return input_val.split(',')
+
+def delete_assessor(Assessor, XnatInterface, ProjectID, SubjectID, SessionID, selectresources, arg_resource_list):
+    # delete all resources in the assessor before deleting the assessor
+    print "  | Assessor: {assl} |".format(assl=Assessor['assessor_label'])
+
+    resource_list = XnatUtils.list_assessor_out_resources(XnatInterface, ProjectID, SubjectID, SessionID, Assessor['assessor_label'])
+    resource_label_list = []
+    for rsrcItem in resource_list:
+        resource_label_list.append(rsrcItem['label'])
+
+    if selectresources:
+        # check if all resources to be deleted exist in the XNAT project
+        missingResource_list = [itemR for itemR in arg_resource_list if itemR not in resource_label_list]
+        if len(missingResource_list) > 0:
+            print "      WARNING: the following resources were not found:"
+            for missingR in missingResource_list:
+                print "      > {mR}".format(mR=missingR)
+
+    if len(resource_label_list) > 0:
+        for resource_label in resource_label_list:
+            if not selectresources:
+                XnatInterface.select(
+                    '/project/' + ProjectID + '/subject/' + SubjectID + '/experiment/' + SessionID + '/assessor/' + Assessor['assessor_id'] + '/resource/' + resource_label).delete()
+                print "    > Resource deleted: {rsrc}".format(rsrc=resource_label)
+            else:
+                if resource_label in arg_resource_list:
+                    XnatInterface.select(
+                        '/project/' + ProjectID + '/subject/' + SubjectID + '/experiment/' + SessionID + '/assessor/' + Assessor['assessor_id'] + '/resource/' + resource_label).delete()
+                    print "    > Resource deleted: {rsrc}".format(rsrc=resource_label)
+    if not selectresources:
+        # delete the assessor
+        XnatInterface.select('/project/' + ProjectID + '/subject/' + SubjectID + '/experiment/' + SessionID + '/assessor/' + Assessor['assessor_id']).delete()
+        print "    > Assessor deleted: {assrDeleted}".format(assrDeleted=Assessor['assessor_label'])
+
+
+
+def delete_scan(Scan, XnatInterface, ProjectID, SubjectID, SessionID, selectresources, arg_resource_list):
+    # delete all resources in the scan before deleting the assessor
+    print "  | Scan: {assl} |".format(assl=Scan['scan_label'])
+
+    resource_list = XnatUtils.list_scan_resources(XnatInterface, ProjectID, SubjectID, SessionID, Scan['scan_label'])
+    resource_label_list = []
+    for rsrcItem in resource_list:
+        resource_label_list.append(rsrcItem['label'])
+
+    if selectresources:
+        # check if all resources to be deleted exist in the XNAT project
+        missingResource_list = [itemR for itemR in arg_resource_list if itemR not in resource_label_list]
+        if len(missingResource_list) > 0:
+            print "      WARNING: the following resources were not found:"
+            for missingR in missingResource_list:
+                print "      > {mR}".format(mR=missingR)
+
+    if len(resource_label_list) > 0:
+        for resource_label in resource_label_list:
+            if not selectresources:
+                XnatInterface.select(
+                    '/project/' + ProjectID + '/subject/' + SubjectID + '/experiment/' + SessionID + '/scan/' + Scan['scan_id'] + '/resource/' + resource_label).delete()
+                print "    > Resource deleted: {rsrc}".format(rsrc=resource_label)
+            else:
+                if resource_label in arg_resource_list:
+                    XnatInterface.select(
+                        '/project/' + ProjectID + '/subject/' + SubjectID + '/experiment/' + SessionID + '/scan/' + Scan['scan_id'] + '/resource/' + resource_label).delete()
+                    print "    > Resource deleted: {rsrc}".format(rsrc=resource_label)
+    if not selectresources:
+        # delete the scan
+        XnatInterface.select('/project/' + ProjectID + '/subject/' + SubjectID + '/experiment/' + SessionID + '/scan/' + Scan['scan_id']).delete()
+        print "    > Scan deleted: {scnDeleted}".format(scnDeleted=Scan['scan_label'])
+
+
+
+if __name__ == "__main__":
+
+    print '\n===================== XNATDELETE ====================='
+
+    arguments = parse_args()
+    ProjectID = arguments.project
+
+    XnatInterface = XnatUtils.get_interface()
+
+    Subject_list = list()
+    Session_list = list()
+
+    if arguments.session == "all":
+        allSessions_list = XnatUtils.list_sessions(XnatInterface, ProjectID)
+        for session in allSessions_list:
+            Subject_list.append(session['subject_label'])
+            Session_list.append(session['session_label'])
+
+    else:
+        allSessions_list = XnatUtils.list_sessions(XnatInterface, ProjectID)
+
+        allSessionLabels_list = list()
+        for allSession in allSessions_list:
+            allSessionLabels_list.append(allSession['session_label'])
+
+        allSubjectLabels_list = list()
+        for allSessionSub in allSessions_list:
+            allSubjectLabels_list.append(allSessionSub['subject_label'])
+
+        # combine the session and subject labels into a dict -- zip(key, value)
+        sessSubj_dict = dict(zip(allSessionLabels_list, allSubjectLabels_list))
+
+        arg_session_list = get_list(arguments.session)
+
+        # check if all sessions exist in the XNAT project
+        missingSessions_list = [item for item in arg_session_list if item not in allSessionLabels_list]
+        if len(missingSessions_list) > 0:
+            print "\nWARNING: the following sessions were not found in the XNAT project:"
+            for missS in missingSessions_list:
+                print missS
+
+        for arg_session in arg_session_list:
+            if arg_session in sessSubj_dict:
+                Subject_list.append(sessSubj_dict[arg_session])
+                Session_list.append(arg_session)
+
+    Label_list = list()
+    Type_list = list()
+    resourceName_list = list()
+    inputTypeFlag = None
+
+    resource_List = list()
+    if arguments.resourceArg:
+        resource_List = get_list(arguments.resourceArg)
+
+    xnatDeletionItem = ''
+    xnatItemDict = {}
+    if (arguments.allassessors or arguments.assessorType or arguments.assessorLabel or arguments.allscans or arguments.scanType or arguments.scanLabel) and (arguments.sessionResource or arguments.allsessionresources):
+        print '\nERROR: cannot use scan or assessor arguments in combination with session-level resource arguments.'
+        sys.exit()
+    elif arguments.sessionResource or arguments.allsessionresources:
+        if arguments.sessionResource and arguments.allsessionresources:
+            print '\nERROR: cannot use -R in combination with --AllSessionResources.'
+            sys.exit()
+        print "\nSession(s) from which session-level resources will be deleted:"
+        for stn in Session_list:
+            print stn
+
+        if arguments.sessionResource:
+            resourceName_list = get_list(arguments.sessionResource)
+            print '\nThe following session-level resources will be deleted from the specified session(s):'
+            for itemrn in resourceName_list:
+                print itemrn
+        elif arguments.allsessionresources:
+            print '\nAll session-level resources for the specified session(s) will be deleted.'
+    elif (arguments.allassessors or arguments.assessorType or arguments.assessorLabel) and (arguments.allscans or arguments.scanType or arguments.scanLabel):
+        print '\nERROR: cannot use scan and assessor arguments simultaneously.'
+        sys.exit()
+    elif arguments.assessorLabel or arguments.assessorType or arguments.allassessors:
+        xnatItemDict = {'all': arguments.allassessors, 'Type': arguments.assessorType, 'Label': arguments.assessorLabel, 'nameLS': 'assessor', 'nameUS': 'Assessor', 'nameLP': 'assessors', 'nameUP': 'Assessors'}
+        xnatDeletionItem = 'assessor'
+    elif arguments.scanLabel or arguments.scanType or arguments.allscans:
+        xnatItemDict = {'all': arguments.allscans, 'Type': arguments.scanType, 'Label': arguments.scanLabel, 'nameLS': 'scan', 'nameUS': 'Scan', 'nameLP': 'scans', 'nameUP': 'Scans'}
+        xnatDeletionItem = 'scan'
+    else:
+        print '\nERROR: no items specified for deletion.'
+        sys.exit()
+
+
+    if not arguments.allsessionresources and not arguments.sessionResource:
+        if not xnatItemDict['all']:
+            if not xnatItemDict['Type'] and not xnatItemDict['Label']:
+                print "\nERROR: no {LP} were specified for deletion.".format(LP=xnatItemDict['nameLP'])
+                sys.exit()
+
+            elif xnatItemDict['Type'] and xnatItemDict['Label']:
+                print "\nERROR: --{LS}Type and --{LS}Label cannot be used simultaneously.".format(LS=xnatItemDict['nameLS'])
+                sys.exit()
+
+            elif xnatItemDict['Type']:
+                print "\nProject: {projN}".format(projN=ProjectID)
+                inputTypeFlag = "type"
+                Type_list = get_list(xnatItemDict['Type'])  # convert to list if not already
+
+                if arguments.resourceArg:
+                    if arguments.session == "all":
+                        print "\n{US} type(s) from which the resource(s) will be deleted for all sessions in the project:".format(US=xnatItemDict['nameUS'])
+                        for aat in Type_list:
+                            print aat
+                        print "\nResource(s) to be deleted:"
+                        for rcla in resource_List:
+                            print rcla
+                    else:
+                        print "\nSession(s) from which {LS} resources will be deleted:".format(LS=xnatItemDict['nameLS'])
+                        for st in Session_list:
+                            print st
+                        print "\n{US} type(s) from which the resource(s) will be deleted:".format(US=xnatItemDict['nameUS'])
+                        for at in Type_list:
+                            print at
+                        print "\nResource(s) to be deleted:"
+                        for rcl in resource_List:
+                            print rcl
+                else:
+                    if arguments.session == "all":
+                        print "\n{US} type(s) to be deleted from all sessions in the project:".format(US=xnatItemDict['nameUS'])
+                        for aat in Type_list:
+                            print aat
+                    else:
+                        print "\nSession(s) from which {LS}(s) will be deleted:".format(LS=xnatItemDict['nameLS'])
+                        for st in Session_list:
+                            print st
+                        print "\n{US} type(s) to be deleted:".format(US=xnatItemDict['nameUS'])
+                        for at in Type_list:
+                            print at
+
+            elif xnatItemDict['Label']:
+                print "\nProject: {projN}".format(projN=ProjectID)
+                inputTypeFlag = "label"
+                Label_list = get_list(xnatItemDict['Label'])  # convert to list if not already
+
+                if arguments.resourceArg:
+                    if arguments.session == "all":
+                        print "\n{US} containing the resource(s) to be deleted from all sessions in the project:".format(US=xnatItemDict['nameUS'])
+                        for aap in Label_list:
+                            print aap
+                        print "\nResource(s) to be deleted:"
+                        for rclpa in resource_List:
+                            print rclpa
+                    else:
+                        print "\nSession(s) from which {LS} resources will be deleted:".format(LS=xnatItemDict['nameLS'])
+                        for sp in Session_list:
+                            print sp
+                        print "\n{US}(s) containing the resource(s) to be deleted:".format(US=xnatItemDict['nameUS'])
+                        for ap in Label_list:
+                            print ap
+                        print "\nResource(s) to be deleted:"
+                        for rclp in resource_List:
+                            print rclp
+                else:
+                    if arguments.session == "all":
+                        print "\n{US}(s) to be deleted from all sessions in the project:".format(US=xnatItemDict['nameUS'])
+                        for aap in Label_list:
+                            print aap
+                    else:
+                        print "\nSession(s) from which {LS}(s) will be deleted:".format(LS=xnatItemDict['nameLS'])
+                        for sp in Session_list:
+                            print sp
+                        print "\n{US}(s) to be deleted:".format(US=xnatItemDict['nameUS'])
+                        for ap in Label_list:
+                            print ap
+        else:
+            if xnatItemDict['Label'] or xnatItemDict['Type']:
+                print "\nERROR: --{LS}Type and --{LS}Label cannot be used in combination with --All{UP}".format(LS=xnatItemDict['nameLS'], UP=xnatItemDict['nameUP'])
+                sys.exit()
+            print "\nProject: {projN}".format(projN=ProjectID)
+            if arguments.resourceArg:
+                if arguments.session == "all":
+                    print "\nDeleting the following resource(s) from all {LP} for every session in the project:".format(LP=xnatItemDict['nameLP'])
+                    for apev in resource_List:
+                        print apev
+                else:
+                    print "\nSessions from which the specified resource(s) will be deleted for all {LP}:".format(LP=xnatItemDict['nameLP'])
+                    for spa in Session_list:
+                        print spa
+                    print "\nResource(s) to be deleted:"
+                    for rclpaa in resource_List:
+                        print rclpaa
+            else:
+                if arguments.session == "all":
+                    print "\nDeleting all {LP} from all sessions in the project...".format(LP=xnatItemDict['nameLP'])
+                else:
+                    print "\nSessions from which all {LP} will be deleted:".format(LP=xnatItemDict['nameLP'])
+                    for spa in Session_list:
+                        print spa
+
+        selectResources = False
+        if arguments.resourceArg:
+            selectResources = True
+
+    if arguments.force:
+        userResponse = 'yes'
+        print 'Force to delete files using Xnatdelete.\n'
+    else:
+        userResponse = raw_input('\nAre you sure you want to continue with the deletion (yes/no)?')
+        if not userResponse == 'yes':
+            if not userResponse == 'Yes':
+                if not userResponse == 'no':
+                    if not userResponse == 'No':
+                        print 'Unrecognized input. Exiting Xnatdelete.\n'
+                        sys.exit()
+                    else:
+                        sys.exit()
+                else:
+                    sys.exit()
+
+
+    if len(Subject_list) == len(Session_list):
+
+        # check for "*" in the assessor label
+        replace = False
+        if xnatDeletionItem == 'assessor' and inputTypeFlag == "label":
+            for label_t in Label_list:
+                if label_t.split('-x-')[1] == '*' or label_t.split('-x-')[2] == '*':
+                    if len(Label_list) == 1:
+                        if len(Session_list) > 1:
+                            if label_t.split('-x-')[1] == '*' and label_t.split('-x-')[2] == '*':
+                                replace = True
+                                Label_list_original = Label_list
+                            else:
+                                print '\nERROR: Both subject AND session ID must be replaced when using "*" in the assessor label.'
+                                sys.exit()
+                        else:
+                            print '\nERROR: Please specify more than one session when using "*" in the assessor label.'
+                            sys.exit()
+                    else:
+                        print '\nERROR: Please provide only a single assessor label when using "*" in the label.'
+                        sys.exit()
+
+        index = 0
+        while index < len(Session_list):
+
+            SubjectID = Subject_list[index]
+            SessionID = Session_list[index]
+            index += 1
+
+            print "\n| Session: {sess} |".format(sess=SessionID)
+
+
+            if not arguments.sessionResource and not arguments.allsessionresources:
+                if xnatDeletionItem == 'assessor':
+                    assessor_list = XnatUtils.list_assessors(XnatInterface, ProjectID, SubjectID, SessionID)
+
+                    if not assessor_list:
+                        print "      WARNING: Unable to retrieve assessor list from session {ses}".format(ses=SessionID)
+                        continue
+
+                    if replace:
+                        for label_d in Label_list:
+                            label_d = label_d.replace('*', SubjectID, 1)  # replace subject in label
+                            new_label = label_d.replace('*', SessionID, 1)  # replace session in label
+                            Label_list = [new_label]
+
+                    DeletedAssr = 'null'
+                    DeletedAssr_list = []
+
+                    for assessor in assessor_list:
+
+                        if arguments.allassessors:
+                            delete_assessor(assessor, XnatInterface, ProjectID, SubjectID, SessionID, selectResources, resource_List)
+
+                        elif inputTypeFlag == "type":
+                            if assessor["proctype"] in Type_list:
+                                DeletedAssr = assessor["proctype"]
+                                deleteAll = False
+                                delete_assessor(assessor, XnatInterface, ProjectID, SubjectID, SessionID, selectResources, resource_List, )
+
+                        elif inputTypeFlag == "label":
+                            if assessor["assessor_label"] in Label_list:
+                                DeletedAssr = assessor["assessor_label"]
+                                deleteAll = False
+                                delete_assessor(assessor, XnatInterface, ProjectID, SubjectID, SessionID, selectResources, resource_List)
+
+                        if DeletedAssr != 'null':
+                            DeletedAssr_list.append(DeletedAssr)
+
+                    if inputTypeFlag == "type":
+                        for Assessor_type in Type_list:
+                            if Assessor_type not in DeletedAssr_list:
+                                print "      WARNING: {assrlabel} was not found in session {sessW}".format(assrlabel=Assessor_type, sessW=SessionID)
+                    elif inputTypeFlag == "label":
+                        for Assessor_proc in Label_list:
+                            if Assessor_proc not in DeletedAssr_list:
+                                print "      WARNING: {assrlabel} was not found in session {sessW}".format(assrlabel=Assessor_proc, sessW=SessionID)
+                    if replace:
+                        Label_list = Label_list_original
+
+                elif xnatDeletionItem == 'scan':
+                    scan_list = XnatUtils.list_scans(XnatInterface, ProjectID, SubjectID, SessionID)
+
+                    if not scan_list:
+                        print "      WARNING: Unable to retrieve scan list from session {ses}".format(ses=SessionID)
+                        continue
+
+                    DeletedScan = 'null'
+                    DeletedScan_list = []
+
+                    for scan in scan_list:
+
+                        if arguments.allscans:
+                            delete_scan(scan, XnatInterface, ProjectID, SubjectID, SessionID, selectResources, resource_List)
+
+                        elif inputTypeFlag == "type":
+                            if scan["scan_type"] in Type_list:
+                                DeletedScan = scan["scan_type"]
+                                deleteAll = False
+                                delete_scan(scan, XnatInterface, ProjectID, SubjectID, SessionID, selectResources, resource_List, )
+
+                        elif inputTypeFlag == "label":
+                            if scan["scan_label"] in Label_list:
+                                DeletedScan = scan["scan_label"]
+                                deleteAll = False
+                                delete_scan(scan, XnatInterface, ProjectID, SubjectID, SessionID, selectResources, resource_List)
+
+                        if DeletedScan != 'null':
+                            DeletedScan_list.append(DeletedScan)
+
+                    if inputTypeFlag == "type":
+                        for Type in Type_list:
+                            if Type not in DeletedScan_list:
+                                print "      WARNING: {scnlabel} was not found in session {sessW}".format(scnlabel=Type, sessW=SessionID)
+                    elif inputTypeFlag == "label":
+                        for Label in Label_list:
+                            if Label not in DeletedScan_list:
+                                print "      WARNING: {scnlabel} was not found in session {sessW}".format(scnlabel=Label, sessW=SessionID)
+            else:
+                # delete session-level resources
+                # get list of available session-level resources
+                sessionResourcesDict = XnatUtils.list_session_resources(XnatInterface, ProjectID, SubjectID, SessionID)
+
+                # convert dict into list
+                sessionResourcesList = []
+                for dictItem in sessionResourcesDict:
+                    sessionResourcesList.append(dictItem['label'])
+
+                if arguments.sessionResource:
+                    # compare lists to find missing resource names from xnat
+                    for rsrcItem in resourceName_list:
+                        if rsrcItem not in sessionResourcesList:
+                            print "    WARNING: {sesrsclabel} was not found in session {sessW}".format(sesrsclabel=rsrcItem, sessW=SessionID)
+
+                elif arguments.allsessionresources:
+                    for sessrsc in sessionResourcesDict:
+                        resourceName_list.append(sessrsc['label'])
+                for resourceName in resourceName_list:
+                    if resourceName in sessionResourcesList:
+                        # delete each resourceName
+                        XnatInterface.select('/project/' + ProjectID + '/subject/' + SubjectID + '/experiment/' + SessionID + '/resources/' + resourceName).delete()
+                        print "  > Session-level resource deleted: {sessrsrc}".format(sessrsrc=resourceName)
+    else:
+        print "Unknown error. Subject and session lists are not of equal length."
+    print ''
+
