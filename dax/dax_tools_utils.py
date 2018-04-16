@@ -2113,7 +2113,27 @@ def load_test(filepath):
         print('[ERROR] %s does not exists.' % filepath)
         return None
 
-    if filepath.endswith('.py') oris_python_file(filepath):
+    if filepath.endswith('yaml'):
+        doc = XnatUtils.read_yaml(filepath)
+
+        if 'projects' in list(doc.keys()):
+            try:
+                return bin.read_yaml_settings(filepath, LOGGER)
+            except AutoProcessorError:
+                print('[ERROR]')
+                exc_type, exc_value, exc_traceback = sys.exc_info()
+                traceback.print_exception(exc_type, exc_value, exc_traceback,
+                                          limit=2, file=sys.stdout)
+        else:
+            # So far only auto processor:
+            try:
+                return processors.AutoProcessor(filepath)
+            except AutoProcessorError:
+                print('[ERROR]')
+                exc_type, exc_value, exc_traceback = sys.exc_info()
+                traceback.print_exception(exc_type, exc_value, exc_traceback,
+                                          limit=2, file=sys.stdout)
+    elif filepath.endswith('.py') or is_python_file(filepath):
         test = imp.load_source('test', filepath)
         # Check if processor file
         try:
@@ -2137,27 +2157,6 @@ def load_test(filepath):
 the python file {}.'
         print(err.format(filepath))
         return None
-
-    elif filepath.endswith('yaml'):
-        doc = XnatUtils.read_yaml(filepath)
-
-        if 'projects' in list(doc.keys()):
-            try:
-                return bin.read_yaml_settings(filepath, LOGGER)
-            except AutoProcessorError:
-                print('[ERROR]')
-                exc_type, exc_value, exc_traceback = sys.exc_info()
-                traceback.print_exception(exc_type, exc_value, exc_traceback,
-                                          limit=2, file=sys.stdout)
-        else:
-            # So far only auto processor:
-            try:
-                return processors.AutoProcessor(filepath)
-            except AutoProcessorError:
-                print('[ERROR]')
-                exc_type, exc_value, exc_traceback = sys.exc_info()
-                traceback.print_exception(exc_type, exc_value, exc_traceback,
-                                          limit=2, file=sys.stdout)
 
     else:
         err = '[ERROR] {} format unknown. Please provide a .py or .yaml file.'
