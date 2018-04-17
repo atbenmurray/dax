@@ -20,6 +20,7 @@ from .task import Task, ClusterTask, XnatTask
 from .dax_settings import DAX_Settings, DAX_Netrc
 from .errors import (ClusterCountJobsException, ClusterLaunchException,
                      DaxXnatError, DaxLauncherError)
+from . import yaml_doc
 
 
 try:
@@ -127,8 +128,17 @@ name as a key and list of yaml filepaths as values.'
             for yaml_obj in yaml_objs:
                 if isinstance(yaml_obj, processors.AutoProcessor):
                     proc = yaml_obj
-                else:
+                elif isinstance(yaml_obj, str):
+                    # TODO: BenM/general_refactor/this logic should be handled
+                    # further up the call stack - launchers should be provided
+                    # AutoProcessors rather than strings for yaml files
+                    yaml_obj = yaml_doc.YamlDoc().from_file(yaml_obj)
                     proc = processors.AutoProcessor(yaml_obj)
+                elif isinstance(yaml_obj. yaml_doc.YamlDoc):
+                    proc = processors.AutoProcessor(yaml_obj)
+                else:
+                    err = 'yaml_obj of type {} is unsupported'
+                    raise DaxLauncherError(err.format(type(yaml_obj)))
                 if project not in self.project_process_dict:
                     self.project_process_dict[project] = [proc]
                 else:

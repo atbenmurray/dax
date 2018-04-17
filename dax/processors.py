@@ -495,20 +495,23 @@ processor defined by yaml file {}'
 defined by yaml file {}'
                     LOGGER.warn(msg.format(tags[-1], yaml_file))
 
-    def read_yaml(self, yaml_file):
+    def read_yaml(self, yaml_source):
         """
-        Method to read the processor arguments and there default value.
+        Method to read the processor arguments and their default values.
 
-        :param yaml_file: path to yaml file defining the processor
+        :param yaml_source: YamlDoc object containing the yaml file contents
         """
-        if not os.path.isfile(yaml_file):
-            err = 'Path not found for {}'
-            raise AutoProcessorError(err.format(yaml_file))
+        # if not os.path.isfile(yaml_source):
+        #     err = 'Path not found for {}'
+        #     raise AutoProcessorError(err.format(yaml_source))
+        if yaml_source.source_type is None:
+            raise AutoProcessorError('Empty yaml source provided')
 
-        doc = XnatUtils.read_yaml(yaml_file)
+        #doc = XnatUtils.read_yaml(yaml_file)
+        doc = yaml_source.contents
 
         # Set Inputs from Yaml
-        self._check_default_keys(yaml_file, doc)
+        self._check_default_keys(yaml_source.source_id, doc)
         self.attrs = doc.get('attrs')
         self.command = doc.get('command')
         inputs = doc.get('inputs')
@@ -528,7 +531,7 @@ defined by yaml file {}'
         self.proctype, self.version = XnatUtils.get_proctype(
             self.inputs.get('spider_path'), self.attrs.get('suffix', None))
 
-        # Set attributs:
+        # Set attributes:
         self.spider_path = self.inputs.get('spider_path')
         self.name = self.proctype
         self.type = self.attrs.get('type')
@@ -841,6 +844,9 @@ resource/{4}'
         # Get the csess:
         csess = XnatUtils.CachedImageSession(assessor._intf, proj_label,
                                              subj_label, sess_label)
+
+        # TODO: BenM/assessor_of_assessors/parse each scan / assessor and
+        # any select statements and generate one or more corresponding commands
 
         # Get the data from xnat for the xnat_inputs:
         # Scans:

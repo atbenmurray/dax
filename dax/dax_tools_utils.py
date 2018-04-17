@@ -47,6 +47,7 @@ from . import processors
 from . import task
 from . import xnat_tools_utils
 from . import XnatUtils
+from . import yaml_doc
 from .dax_settings import (DAX_Settings, DAX_Netrc, DEFAULT_DATATYPE,
                            DEFAULT_FS_DATATYPE)
 from .errors import DaxUploadError, AutoProcessorError, DaxSetupError, DaxError
@@ -2127,7 +2128,8 @@ def load_test(filepath):
         else:
             # So far only auto processor:
             try:
-                return processors.AutoProcessor(filepath)
+                yaml_obj = yaml_doc.YamlDoc().from_file(filepath)
+                return processors.AutoProcessor(yaml_obj)
             except AutoProcessorError:
                 print('[ERROR]')
                 exc_type, exc_value, exc_traceback = sys.exc_info()
