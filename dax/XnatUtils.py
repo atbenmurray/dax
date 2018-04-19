@@ -3325,6 +3325,10 @@ class CachedResource(object):
         """
         return self.res_element.get('label')
 
+    def file_count(self):
+        file_count = self.get('filecount')
+        return file_count if file_count != '' else 0
+
     def get(self, name):
         """
         Get the value of a variable associated with the resource

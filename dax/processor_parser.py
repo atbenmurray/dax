@@ -7,6 +7,12 @@ session_namespace = {
 }
 
 
+no_scans_error = 'No scan of the required type/s ({}) found for input {}'
+no_asrs_error = 'No assessors of the require type/s ({}) found for input {}'
+scan_unusable_error = 'Scan {} is unusable for input {}'
+asr_unusable_error = 'Assessor {} is unusable for input {}'
+
+
 def _get_args(statement):
     leftindex = statement.find('(')
     rightindex = statement.find(')')
@@ -53,16 +59,21 @@ def _input_name(scan):
 
 
 def parse_inputs(yaml_source):
+    # TODO: BenM/assessor_of_assessor/check error conditions on inputs:
+    # . resource should be set
+    # . no repeated input names
+    # . ambiguous overlaps for input types (this may not be a problem)?
 
     inputs_by_type = {}
     iteration_sources = set()
     iteration_map = {}
 
     # get inputs: pass 1
-    inputs = yaml_source['inputs']
-    xnat = inputs['xnat']
+    input_dict = yaml_source['inputs']
+    xnat = input_dict['xnat']
     print 'xnat =', xnat
 
+    inputs = {}
     # get scans
     scans = xnat.get('scans', list())
     for s in scans:
@@ -72,22 +83,55 @@ def parse_inputs(yaml_source):
         _register_iteration_references(name, _parse_select(select),
                                        iteration_sources, iteration_map)
 
-        _register_input_types([_.strip() for _ in s['types'].split(',')],
-                              inputs_by_type, name)
+        types = [_.strip() for _ in s['types'].split(',')]
+        _register_input_types(types, inputs_by_type, name)
+
+        inputs[name] = {
+            'types': types,
+            'artefact_type': 'scan',
+            'needs_qc': s.get('needs_qc', False),
+            'resources': s.get('resources', [])
+        }
 
     # get assessors
     asrs = xnat.get('assessors', list())
     for a in asrs:
+        print "a =", a
         name = _input_name(a)
         select = a.get('select', None)
 
         _register_iteration_references(name, _parse_select(select),
                                        iteration_sources, iteration_map)
 
-        _register_input_types([_.strip() for _ in a['proctypes'].split(',')],
-                              inputs_by_type, name)
+        types = [_.strip() for _ in a['proctypes'].split(',')]
+        _register_input_types(types, inputs_by_type, name)
 
-    return inputs_by_type, iteration_sources, iteration_map
+        inputs[name] = {
+            'types': types,
+            'artefact_type': 'assessor',
+            'needs_qc': s.get('needs_qc', False),
+            'resources': s.get('resources', [])
+        }
+
+    return inputs, inputs_by_type, iteration_sources, iteration_map
+
+
+def parse_artefacts(csess):
+    def parse(carts, arts):
+        for cart in carts:
+            artefact = {}
+            resources = {}
+            artefact['entity'] = cart
+            artefact['resources'] = resources
+            for cres in cart.get_resources():
+                resources[cres.label()] = cres
+            arts[cart.id()] = artefact
+
+    artefacts = {}
+    parse(csess.scans(), artefacts)
+    parse(csess.assessors(), artefacts)
+    return artefacts
+
 
 
 def map_artefact_to_inputs(artefact, inputs_by_type, artefacts_by_input):
@@ -115,9 +159,58 @@ def map_artefacts_to_inputs(csess, inputs_by_type):
     return artefacts_by_input
 
 
+# TODO: BenM/assessor_of_assessor/has_inputs needs to be run on a particular
+# combination of inputs; this method isn't doing that!
+# This method really should just be checking if there are inputs of the proper
+# type in the first place; another method should check the status of individual
+# combinations of inputs. Remember, we always create an assessor if a given
+# combination if inputs is present, even if it can't yet run
+def has_inputs(inputs, artefacts, artefacts_by_input):
+    errors = []
+    for k, v in inputs.iteritems():
+        is_scan = v['artefact_type'] == 'scan'
+        if k not in artefacts_by_input:
+            # there are no available artefacts of this input type
+            error_msg = no_scans_error if is_scan else no_asrs_error
+            errors.append(error_msg.format(','.join(v['types']), k))
+        elif artefacts[k]['entity'].unusable() and v['needs_qc']:
+            error_msg = scan_unusable_error if is_scan else asr_unusable_error
+            errors.append(error_msg.format(','.join(k)))
+        else:
+            print k, 'can use',
+
+
+
+    return len(errors) == 0, errors
+
+
 def generate_commands(command_template, inputs_by_type, iteration_sources,
-                      artefacts_by_type, artefacts_by_input):
+                      iteration_map, artefacts_by_input):
 
     # generate n dimensional input matrix based on iteration sources
+    input_dimension_map = {}
+    for i in iteration_sources:
+        # find other inputs that map to this iteration source
+        mapped_inputs = []
+        mapped_input_vector = []
+        if len(artefacts_by_input.get(i, [])) > 0:
+            mapped_inputs.append(i)
+            for k, v in iteration_map.iteritems():
+                if v == i and len(artefacts_by_input.get(k, [])) > 0:
+                    mapped_inputs.append(k)
 
-    # generate 'zip' of inputs that are all attached to iteration source
+            print "mapped_inputs =", mapped_inputs
+
+            # generate 'zip' of inputs that are all attached to iteration source
+
+            for ind in range(len(artefacts_by_input[i])):
+                cur = []
+                for m in mapped_inputs:
+                    cur.append(
+                        artefacts_by_input[m][ind % len(artefacts_by_input[m])]
+                    )
+                mapped_input_vector.append(cur)
+
+        input_dimension_map[i] = (mapped_inputs, mapped_input_vector)
+
+    print input_dimension_map

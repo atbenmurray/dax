@@ -1,17 +1,33 @@
 from unittest import TestCase
 
+import copy
+
 import StringIO
 import yaml
 
 from dax import processor_parser
 
 
+class TestResource:
+
+    def __init__(self, label, file_count):
+        self.label_ = label
+        self.file_count_ = file_count
+
+    def label(self):
+        return self.label_
+
+    def file_count(self):
+        return self.file_count
+
+
 class TestArtefact:
 
-    def __init__(self, id, artefact_type, quality):
+    def __init__(self, id, artefact_type, quality, resources):
         self.id_ = id
         self.artefact_type = artefact_type
         self.quality_ = quality
+        self.resources = [TestResource(r[0], r[1]) for r in resources]
 
     def id(self):
         return self.id_
@@ -22,12 +38,15 @@ class TestArtefact:
     def quality(self):
         return self.quality_
 
+    def get_resources(self):
+        return self.resources
+
 
 class TestSession:
 
-    def __init__(self, scans, assessors):
-        self.scans_ = [TestArtefact(s[0], s[1], s[2]) for s in scans]
-        self.assessors_ = [TestArtefact(a[0], a[1], a[2]) for a in assessors]
+    def __init__(self, scans, asrs):
+        self.scans_ = [TestArtefact(s[0], s[1], s[2], s[3]) for s in scans]
+        self.assessors_ = [TestArtefact(a[0], a[1], a[2], a[3]) for a in asrs]
 
     def scans(self):
         return self.scans_
@@ -36,20 +55,27 @@ class TestSession:
         return self.assessors_
 
 
+scan_files = [('SNAPSHOTS', 2), ('NIFTI', 1)]
+
 xnat_scan_contents = [
-    ("1", "T1W", "usable"),
-    ("2", "T1w", "usable"),
-    ("10", "FLAIR", "usable"),
-    ("11", "FLAIR", "usable"),
+    ("1", "T1W", "usable", copy.deepcopy(scan_files)),
+    ("2", "T1w", "usable", copy.deepcopy(scan_files)),
+    ("3", "T1", "usable", copy.deepcopy(scan_files)),
+    ("10", "FLAIR", "usable", copy.deepcopy(scan_files)),
+    ("11", "FLAIR", "usable", copy.deepcopy(scan_files)),
 ]
 
 
-assessor_prefix = "proj1-x-subj1-x-sess1-x-"
+asr_prefix = "proj1-x-subj1-x-sess1-x-"
 
+asr_files = [
+    ('LABELS', 1), ('PDF', 1), ('BIAS_COR', 1), ('PRIOR', 1), ('SEG', 1),
+    ('STATS', 1), ('SNAPSHOTS', 2), ('OUTLOG', 1), ('PBS', 1)
+]
 
 xnat_assessor_contents = [
-    (assessor_prefix + "1-x-proc1", "proc1", "usable"),
-    (assessor_prefix + "2-x-proc1", "proc1", "usable")
+    (asr_prefix + "1-x-proc1", "proc1", "usable", copy.deepcopy(asr_files)),
+    (asr_prefix + "2-x-proc1", "proc1", "usable", copy.deepcopy(asr_files))
 ]
 
 
@@ -88,7 +114,7 @@ inputs:
         select: all
     assessors:
       - asr1:
-        proctypes: gif_thing
+        proctypes: proc1
         select: foreach(scan1)
         resources:
           - resource: SEG
@@ -113,13 +139,30 @@ class MyTestCase(TestCase):
         csess = TestSession(xnat_scan_contents, xnat_assessor_contents)
 
         doc = yaml.load((StringIO.StringIO(scan_gif_parcellation_yaml)))
-        inputs_by_type, iteration_sources, iteration_map =\
+
+        inputs, inputs_by_type, iteration_sources, iteration_map =\
             processor_parser.parse_inputs(doc)
-
-        artefacts_by_input =\
-            processor_parser.map_artefacts_to_inputs(csess, inputs_by_type)
-
+        print "inputs =", inputs
         print "inputs_by_type =", inputs_by_type
         print "iteration_sources =", iteration_sources
         print "iteration_map =", iteration_map
+
+        artefacts = processor_parser.parse_artefacts(csess)
+        print "artefacts =", artefacts
+
+        artefacts_by_input =\
+            processor_parser.map_artefacts_to_inputs(csess, inputs_by_type)
         print "artefacts_by_input =", artefacts_by_input
+
+        status, errors = processor_parser.has_inputs(inputs,
+                                                     artefacts,
+                                                     artefacts_by_input)
+
+        commands =\
+            processor_parser.generate_commands("{}{}{}",
+                                               inputs_by_type,
+                                               iteration_sources,
+                                               iteration_map,
+                                               artefacts_by_input)
+
+        print "commands =", commands
