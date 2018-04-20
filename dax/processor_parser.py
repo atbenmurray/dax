@@ -13,6 +13,19 @@ scan_unusable_error = 'Scan {} is unusable for input {}'
 asr_unusable_error = 'Assessor {} is unusable for input {}'
 
 
+# parser pipeline
+# . check whether artefacts of the appropriate type are present for a given
+#   assessor
+# . if they are, map them to inputs with the appropriate iteration
+#   . if no foreach select statements are present, generate one set of command
+#     parameters
+#   . if one or more foreach select statements are present, generate the
+#     appropriate cartesian product of command parameters
+# . for each set of command parameters generated, create an assessor depending
+#   on the state of the artefacts listed in the command parameters
+#   . if one or more artefacts are of inappropriate quality
+
+
 def _get_args(statement):
     leftindex = statement.find('(')
     rightindex = statement.find(')')
@@ -96,7 +109,6 @@ def parse_inputs(yaml_source):
     # get assessors
     asrs = xnat.get('assessors', list())
     for a in asrs:
-        print "a =", a
         name = _input_name(a)
         select = a.get('select', None)
 
@@ -133,30 +145,62 @@ def parse_artefacts(csess):
     return artefacts
 
 
-
-def map_artefact_to_inputs(artefact, inputs_by_type, artefacts_by_input):
+def map_artefact_to_inputs(artefact,
+                           inputs,
+                           inputs_by_type,
+                           artefacts_by_input):
     artefact_type = artefact.type()
     inputs_of_type = inputs_by_type.get(artefact_type, set())
     if len(inputs_of_type) > 0:
         # this artefact type is relevant to the assessor
         for i in inputs_of_type:
             artefacts = artefacts_by_input.get(i, [])
-            artefacts.append(artefact.id())
-            artefacts_by_input[i] = artefacts
+            matched = 0
+            for ir in (r['resource'] for r in inputs[i]['resources']):
+                for ar in artefact.get_resources():
+                    if ir == ar.label():
+                        matched += 1
+                        break
+            if matched == len(inputs[i]['resources']):
+                artefacts.append(artefact.id())
+                artefacts_by_input[i] = artefacts
 
 
-def map_artefacts_to_inputs(csess, inputs_by_type):
+def map_artefacts_to_inputs(csess, inputs, inputs_by_type):
 
     # a dictionary of input names to artefacts
     artefacts_by_input = {}
 
     for cscan in csess.scans():
-        map_artefact_to_inputs(cscan, inputs_by_type, artefacts_by_input)
+        map_artefact_to_inputs(cscan,
+                               inputs,
+                               inputs_by_type,
+                               artefacts_by_input)
 
     for cassr in csess.assessors():
-        map_artefact_to_inputs(cassr, inputs_by_type, artefacts_by_input)
+        map_artefact_to_inputs(cassr,
+                               inputs,
+                               inputs_by_type,
+                               artefacts_by_input)
 
     return artefacts_by_input
+
+
+def filter_artefacts_by_quality(inputs, artefacts, artefacts_by_input):
+
+    filtered_artefacts_by_input = {}
+
+    for k, v in inputs.iteritems():
+        filtered_artefacts = []
+        for a in artefacts_by_input.get(k, {}):
+            artefact = artefacts[a]
+            if not artefact['entity'].unusable() or v['needs_qc'] is False:
+                filtered_artefacts.append(a)
+
+        if len(filtered_artefacts) > 0:
+            filtered_artefacts_by_input[k] = filtered_artefacts
+
+    return filtered_artefacts_by_input
 
 
 # TODO: BenM/assessor_of_assessor/has_inputs needs to be run on a particular
@@ -165,27 +209,30 @@ def map_artefacts_to_inputs(csess, inputs_by_type):
 # type in the first place; another method should check the status of individual
 # combinations of inputs. Remember, we always create an assessor if a given
 # combination if inputs is present, even if it can't yet run
-def has_inputs(inputs, artefacts, artefacts_by_input):
-    errors = []
-    for k, v in inputs.iteritems():
-        is_scan = v['artefact_type'] == 'scan'
-        if k not in artefacts_by_input:
-            # there are no available artefacts of this input type
-            error_msg = no_scans_error if is_scan else no_asrs_error
-            errors.append(error_msg.format(','.join(v['types']), k))
-        elif artefacts[k]['entity'].unusable() and v['needs_qc']:
-            error_msg = scan_unusable_error if is_scan else asr_unusable_error
-            errors.append(error_msg.format(','.join(k)))
-        else:
-            print k, 'can use',
+# def has_inputs(inputs, artefacts, artefacts_by_input):
+#     errors = []
+#     for k, v in inputs.iteritems():
+#         print "k, v =", k, v
+#         is_scan = v['artefact_type'] == 'scan'
+#         if k not in artefacts_by_input:
+#             # there are no available artefacts of this input type
+#             error_msg = no_scans_error if is_scan else no_asrs_error
+#             errors.append(error_msg.format(','.join(v['types']), k))
+#         elif artefacts[k]['entity'].unusable() and v['needs_qc']:
+#             error_msg = scan_unusable_error if is_scan else asr_unusable_error
+#             errors.append(error_msg.format(','.join(k)))
+#         else:
+#             print k, 'can use',
+#
+#     return len(errors) == 0, errors
 
 
-
-    return len(errors) == 0, errors
-
-
-def generate_commands(command_template, inputs_by_type, iteration_sources,
-                      iteration_map, artefacts_by_input):
+# TODO: BenM/assessor_of_assessors/improve name of generate_parameter_matrix
+# TODO: BenM/assessor_of_assessors/handle multiple args disallowed / allowed
+# scenarios
+def generate_parameter_matrix(iteration_sources,
+                              iteration_map,
+                              artefacts_by_input):
 
     # generate n dimensional input matrix based on iteration sources
     input_dimension_map = {}
@@ -214,3 +261,7 @@ def generate_commands(command_template, inputs_by_type, iteration_sources,
         input_dimension_map[i] = (mapped_inputs, mapped_input_vector)
 
     print input_dimension_map
+
+
+def generate_commands(command_template, artefacts, input_dimension_map):
+    pass

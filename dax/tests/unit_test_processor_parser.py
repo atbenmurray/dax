@@ -18,7 +18,7 @@ class TestResource:
         return self.label_
 
     def file_count(self):
-        return self.file_count
+        return self.file_count_
 
 
 class TestArtefact:
@@ -37,6 +37,12 @@ class TestArtefact:
 
     def quality(self):
         return self.quality_
+
+    def usable(self):
+        return self.quality() == 'usable'
+
+    def unusable(self):
+        return self.quality() == 'unusable'
 
     def get_resources(self):
         return self.resources
@@ -59,8 +65,9 @@ scan_files = [('SNAPSHOTS', 2), ('NIFTI', 1)]
 
 xnat_scan_contents = [
     ("1", "T1W", "usable", copy.deepcopy(scan_files)),
-    ("2", "T1w", "usable", copy.deepcopy(scan_files)),
+    ("2", "T1w", "unusable", copy.deepcopy(scan_files)),
     ("3", "T1", "usable", copy.deepcopy(scan_files)),
+    ("4", "T1", "usable", copy.deepcopy(scan_files)),
     ("10", "FLAIR", "usable", copy.deepcopy(scan_files)),
     ("11", "FLAIR", "usable", copy.deepcopy(scan_files)),
 ]
@@ -91,6 +98,7 @@ inputs:
     scans:
       - scan1:
         types: T1w,MPRAGE,T1,T1W
+        needs_qc: True
         resources:
           - resource: NIFTI
             varname: t1
@@ -132,7 +140,6 @@ attrs:
 """
 
 
-
 class MyTestCase(TestCase):
 
     def test_processor_parser1(self):
@@ -151,18 +158,22 @@ class MyTestCase(TestCase):
         print "artefacts =", artefacts
 
         artefacts_by_input =\
-            processor_parser.map_artefacts_to_inputs(csess, inputs_by_type)
+            processor_parser.map_artefacts_to_inputs(csess,
+                                                     inputs,
+                                                     inputs_by_type)
         print "artefacts_by_input =", artefacts_by_input
 
-        status, errors = processor_parser.has_inputs(inputs,
-                                                     artefacts,
-                                                     artefacts_by_input)
+        # status, errors = processor_parser.has_inputs(inputs,
+        #                                              artefacts,
+        #                                              artefacts_by_input)
+
+        filtered_artefacts_by_input =\
+            processor_parser.filter_artefacts_by_quality(inputs,
+                                                         artefacts,
+                                                         artefacts_by_input)
+        print "filter_artefacts_by_input =", filtered_artefacts_by_input
 
         commands =\
-            processor_parser.generate_commands("{}{}{}",
-                                               inputs_by_type,
-                                               iteration_sources,
-                                               iteration_map,
-                                               artefacts_by_input)
-
+            processor_parser.generate_parameter_matrix(
+                iteration_sources, iteration_map, filtered_artefacts_by_input)
         print "commands =", commands
